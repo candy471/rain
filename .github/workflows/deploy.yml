@@ -1,0 +1,52 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 允许在 Actions 页面手动重跑，发布失败时不必再推一次 commit
+  workflow_dispatch:
+
+# Pages 官方要求的最小权限：id-token 用于 OIDC 校验部署来源
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只跑一条发布流水线，但不取消进行中的部署（避免发布的站点处于半成品状态）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # vite 8 要求 Node ^20.19 或 >=22.12，取 22 以贴近本地开发环境
+          node-version: 22
+          cache: npm
+
+      # 提前拿到 Pages 的 base 等信息，避免构建阶段缺少环境变量
+      - uses: actions/configure-pages@v5
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # 与仓库 Settings -> Pages -> Source 选 "GitHub Actions" 对应，发布目标即此处
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
